@@ -67,8 +67,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Root route handler for Vercel (should not be reached if routing works)
-app.get('/', (req, res) => {
+// Root route handler - only for API requests (not for frontend)
+// Frontend routes should be handled by Vercel's rewrites
+app.get('/api', (req, res) => {
   res.json({
     success: true,
     message: 'HPW Pool API - Use /api routes'
