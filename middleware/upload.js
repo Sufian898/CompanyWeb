@@ -1,53 +1,13 @@
 const multer = require('multer');
-const path = require('path');
+const cloudinary = require('cloudinary').v2;
+const streamifier = require('streamifier');
 
-// Detect serverless environment (Vercel, AWS Lambda, etc.)
-// In serverless, filesystem is read-only, so we use memory storage
-const isServerless = !!(
-  process.env.VERCEL || 
-  process.env.VERCEL_ENV || 
-  process.env.NOW_REGION ||
-  process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.LAMBDA_TASK_ROOT
-);
-
-// Storage configuration
-// Use memory storage for serverless, disk storage for local development
-// Memory storage stores files in req.file.buffer (no filesystem needed)
-const storage = isServerless
-  ? multer.memoryStorage() // Memory storage for serverless (files in req.file.buffer)
-  : multer.diskStorage({
-      destination: function (req, file, cb) {
-        const fs = require('fs');
-        let uploadPath = 'uploads/';
-        
-        if (file.fieldname === 'cv' || file.fieldname === 'resume') {
-          uploadPath = 'uploads/cvs';
-        } else if (file.fieldname === 'logo') {
-          uploadPath = 'uploads/company-logos';
-        } else if (file.fieldname === 'jobImage' || file.fieldname === 'image') {
-          uploadPath = 'uploads/job-images';
-        } else {
-          uploadPath = 'uploads/profile-images';
-        }
-        
-        // Create directory if it doesn't exist (only in local dev)
-        try {
-          if (!fs.existsSync(uploadPath)) {
-            fs.mkdirSync(uploadPath, { recursive: true });
-          }
-        } catch (err) {
-          // Ignore errors - directory creation is not critical
-        }
-        
-        cb(null, uploadPath);
-      },
-      filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        const ext = path.extname(file.originalname);
-        cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-      }
-    });
+// Configure Cloudinary
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
 
 // File filter
 const fileFilter = (req, file, cb) => {
@@ -72,6 +32,31 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
+// Helper function to upload buffer to Cloudinary
+const uploadToCloudinary = (buffer, folder, publicId) => {
+  return new Promise((resolve, reject) => {
+    const uploadStream = cloudinary.uploader.upload_stream(
+      {
+        folder: folder,
+        public_id: publicId,
+        resource_type: 'auto', // Automatically detect image, video, or raw
+      },
+      (error, result) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve(result);
+        }
+      }
+    );
+    
+    streamifier.createReadStream(buffer).pipe(uploadStream);
+  });
+};
+
+// Multer memory storage (always use memory for Cloudinary)
+const storage = multer.memoryStorage();
+
 const upload = multer({
   storage: storage,
   limits: {
@@ -80,29 +65,136 @@ const upload = multer({
   fileFilter: fileFilter
 });
 
+// Middleware to upload file to Cloudinary after multer processes it
+const uploadToCloudinaryMiddleware = (folder) => {
+  return async (req, res, next) => {
+    if (!req.file) {
+      return next();
+    }
+
+    try {
+      const publicId = `${req.file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+      const result = await uploadToCloudinary(req.file.buffer, folder, publicId);
+      
+      // Attach Cloudinary URL to req.file
+      req.file.cloudinaryUrl = result.secure_url;
+      req.file.cloudinaryPublicId = result.public_id;
+      req.file.cloudinaryPath = result.secure_url; // For backward compatibility
+      
+      next();
+    } catch (error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Error uploading file to Cloudinary: ' + error.message
+      });
+    }
+  };
+};
+
 // Upload single file
-exports.uploadSingle = (fieldName) => upload.single(fieldName);
+exports.uploadSingle = (fieldName, folder = 'uploads') => {
+  return [
+    upload.single(fieldName),
+    uploadToCloudinaryMiddleware(folder)
+  ];
+};
 
 // Upload multiple files
-exports.uploadMultiple = (fieldName, maxCount = 5) => upload.array(fieldName, maxCount);
+exports.uploadMultiple = (fieldName, maxCount = 5, folder = 'uploads') => {
+  return [
+    upload.array(fieldName, maxCount),
+    async (req, res, next) => {
+      if (!req.files || req.files.length === 0) {
+        return next();
+      }
+
+      try {
+        const uploadPromises = req.files.map(async (file) => {
+          const publicId = `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+          const result = await uploadToCloudinary(file.buffer, folder, publicId);
+          file.cloudinaryUrl = result.secure_url;
+          file.cloudinaryPublicId = result.public_id;
+          file.cloudinaryPath = result.secure_url;
+          return file;
+        });
+
+        await Promise.all(uploadPromises);
+        next();
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error uploading files to Cloudinary: ' + error.message
+        });
+      }
+    }
+  ];
+};
 
 // Upload fields
-exports.uploadFields = (fields) => upload.fields(fields);
+exports.uploadFields = (fields, folder = 'uploads') => {
+  return [
+    upload.fields(fields),
+    async (req, res, next) => {
+      if (!req.files) {
+        return next();
+      }
+
+      try {
+        const uploadPromises = [];
+        
+        for (const field of fields) {
+          const files = req.files[field.name];
+          if (files && files.length > 0) {
+            for (const file of files) {
+              const publicId = `${file.fieldname}-${Date.now()}-${Math.round(Math.random() * 1E9)}`;
+              uploadPromises.push(
+                uploadToCloudinary(file.buffer, folder, publicId).then(result => {
+                  file.cloudinaryUrl = result.secure_url;
+                  file.cloudinaryPublicId = result.public_id;
+                  file.cloudinaryPath = result.secure_url;
+                })
+              );
+            }
+          }
+        }
+
+        await Promise.all(uploadPromises);
+        next();
+      } catch (error) {
+        return res.status(500).json({
+          success: false,
+          message: 'Error uploading files to Cloudinary: ' + error.message
+        });
+      }
+    }
+  ];
+};
 
 // CV Upload specifically
-exports.uploadCV = upload.single('cv');
+exports.uploadCV = [
+  upload.single('cv'),
+  uploadToCloudinaryMiddleware('cvs')
+];
 
 // Profile Image Upload
-exports.uploadProfileImage = upload.single('photo');
+exports.uploadProfileImage = [
+  upload.single('photo'),
+  uploadToCloudinaryMiddleware('profile-images')
+];
 
 // Company Logo Upload
-exports.uploadLogo = upload.single('logo');
+exports.uploadLogo = [
+  upload.single('logo'),
+  uploadToCloudinaryMiddleware('company-logos')
+];
 
 // Job Image Upload
-exports.uploadJobImage = upload.single('jobImage');
+exports.uploadJobImage = [
+  upload.single('jobImage'),
+  uploadToCloudinaryMiddleware('job-images')
+];
 
-// Export all functions properly
-const uploadModule = {
+module.exports = {
   uploadSingle: exports.uploadSingle,
   uploadMultiple: exports.uploadMultiple,
   uploadFields: exports.uploadFields,
@@ -111,8 +203,3 @@ const uploadModule = {
   uploadLogo: exports.uploadLogo,
   uploadJobImage: exports.uploadJobImage
 };
-
-// Export default multer instance
-Object.assign(uploadModule, upload);
-
-module.exports = uploadModule;
