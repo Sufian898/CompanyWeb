@@ -11,27 +11,43 @@ const uploadDirs = {
   jobImages: 'uploads/job-images'
 };
 
-// Only create directories if not in Vercel serverless environment
-// Check multiple ways to detect Vercel environment
-const isVercel = process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION;
-if (!isVercel) {
+// Detect serverless environment (Vercel, AWS Lambda, etc.)
+// In serverless, filesystem is read-only, so skip directory creation
+const isServerless = !!(
+  process.env.VERCEL || 
+  process.env.VERCEL_ENV || 
+  process.env.NOW_REGION ||
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.LAMBDA_TASK_ROOT ||
+  (typeof process.env.VERCEL !== 'undefined')
+);
+
+// Only create directories in non-serverless environments
+// Wrap in try-catch to prevent any errors from crashing the app
+if (!isServerless) {
   try {
     Object.values(uploadDirs).forEach(dir => {
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      try {
+        if (fs.existsSync && !fs.existsSync(dir)) {
+          if (fs.mkdirSync) {
+            fs.mkdirSync(dir, { recursive: true });
+          }
+        }
+      } catch (dirError) {
+        // Ignore directory creation errors - not critical
       }
     });
   } catch (error) {
-    // Silently fail if we can't create directories (e.g., in serverless)
-    console.warn('Could not create upload directories:', error.message);
+    // Silently fail - directory creation is not critical
+    // In serverless, we use memory storage anyway
   }
 }
 
 // Storage configuration
-// Use memory storage for Vercel serverless, disk storage for local development
-const isVercelEnv = process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION;
-const storage = isVercelEnv
-  ? multer.memoryStorage() // Memory storage for serverless
+// Use memory storage for serverless, disk storage for local development
+// Always use memory storage in serverless environments (Vercel, Lambda, etc.)
+const storage = isServerless
+  ? multer.memoryStorage() // Memory storage for serverless (files in req.file.buffer)
   : multer.diskStorage({
       destination: function (req, file, cb) {
         let uploadPath = 'uploads/';
