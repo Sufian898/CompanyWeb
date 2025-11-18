@@ -1,5 +1,4 @@
-// Vercel serverless function entry point
 const app = require('../server');
+const serverless = require('serverless-http');
 
-module.exports = app;
-
+module.exports = serverless(app);
