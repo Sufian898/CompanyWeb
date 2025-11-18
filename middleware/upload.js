@@ -22,26 +22,10 @@ const isServerless = !!(
   (typeof process.env.VERCEL !== 'undefined')
 );
 
-// Only create directories in non-serverless environments
-// Wrap in try-catch to prevent any errors from crashing the app
-if (!isServerless) {
-  try {
-    Object.values(uploadDirs).forEach(dir => {
-      try {
-        if (fs.existsSync && !fs.existsSync(dir)) {
-          if (fs.mkdirSync) {
-            fs.mkdirSync(dir, { recursive: true });
-          }
-        }
-      } catch (dirError) {
-        // Ignore directory creation errors - not critical
-      }
-    });
-  } catch (error) {
-    // Silently fail - directory creation is not critical
-    // In serverless, we use memory storage anyway
-  }
-}
+// Skip directory creation completely - not needed for memory storage
+// In serverless (Vercel), filesystem is read-only
+// In local dev, directories will be created on first write if using disk storage
+// This prevents any filesystem errors in serverless environments
 
 // Storage configuration
 // Use memory storage for serverless, disk storage for local development
