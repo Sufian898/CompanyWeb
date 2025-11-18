@@ -2,7 +2,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-// Ensure upload directories exist
+// Ensure upload directories exist (skip in serverless environment)
+// Vercel serverless functions have read-only filesystem
 const uploadDirs = {
   profileImages: 'uploads/profile-images',
   cvs: 'uploads/cvs',
@@ -10,35 +11,49 @@ const uploadDirs = {
   jobImages: 'uploads/job-images'
 };
 
-Object.values(uploadDirs).forEach(dir => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// Only create directories if not in Vercel serverless environment
+// Check multiple ways to detect Vercel environment
+const isVercel = process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION;
+if (!isVercel) {
+  try {
+    Object.values(uploadDirs).forEach(dir => {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+    });
+  } catch (error) {
+    // Silently fail if we can't create directories (e.g., in serverless)
+    console.warn('Could not create upload directories:', error.message);
   }
-});
+}
 
 // Storage configuration
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    let uploadPath = 'uploads/';
-    
-    if (file.fieldname === 'cv' || file.fieldname === 'resume') {
-      uploadPath = uploadDirs.cvs;
-    } else if (file.fieldname === 'logo') {
-      uploadPath = uploadDirs.companyLogos;
-    } else if (file.fieldname === 'jobImage' || file.fieldname === 'image') {
-      uploadPath = uploadDirs.jobImages;
-    } else {
-      uploadPath = uploadDirs.profileImages;
-    }
-    
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
-});
+// Use memory storage for Vercel serverless, disk storage for local development
+const isVercelEnv = process.env.VERCEL || process.env.VERCEL_ENV || process.env.NOW_REGION;
+const storage = isVercelEnv
+  ? multer.memoryStorage() // Memory storage for serverless
+  : multer.diskStorage({
+      destination: function (req, file, cb) {
+        let uploadPath = 'uploads/';
+        
+        if (file.fieldname === 'cv' || file.fieldname === 'resume') {
+          uploadPath = uploadDirs.cvs;
+        } else if (file.fieldname === 'logo') {
+          uploadPath = uploadDirs.companyLogos;
+        } else if (file.fieldname === 'jobImage' || file.fieldname === 'image') {
+          uploadPath = uploadDirs.jobImages;
+        } else {
+          uploadPath = uploadDirs.profileImages;
+        }
+        
+        cb(null, uploadPath);
+      },
+      filename: function (req, file, cb) {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        const ext = path.extname(file.originalname);
+        cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+      }
+    });
 
 // File filter
 const fileFilter = (req, file, cb) => {
