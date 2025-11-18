@@ -169,7 +169,8 @@ exports.uploadCV = async (req, res) => {
       });
     }
 
-    const cvUrl = `/uploads/cvs/${req.file.filename}`;
+    // Use Cloudinary URL if available, otherwise fallback to old path
+    const cvUrl = req.file.cloudinaryUrl || `/uploads/cvs/${req.file.filename}`;
     
     res.json({
       success: true,
