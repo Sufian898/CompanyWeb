@@ -41,9 +41,12 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Static files for uploads
-const path = require('path');
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// Static files for uploads (only in non-serverless environment)
+// Vercel serverless functions can't serve static files from filesystem
+if (!process.env.VERCEL) {
+  const path = require('path');
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+}
 
 // Routes
 app.use('/api/auth', authRoutes);
