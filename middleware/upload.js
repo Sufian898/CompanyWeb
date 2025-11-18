@@ -1,49 +1,43 @@
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
-
-// Ensure upload directories exist (skip in serverless environment)
-// Vercel serverless functions have read-only filesystem
-const uploadDirs = {
-  profileImages: 'uploads/profile-images',
-  cvs: 'uploads/cvs',
-  companyLogos: 'uploads/company-logos',
-  jobImages: 'uploads/job-images'
-};
 
 // Detect serverless environment (Vercel, AWS Lambda, etc.)
-// In serverless, filesystem is read-only, so skip directory creation
+// In serverless, filesystem is read-only, so we use memory storage
 const isServerless = !!(
   process.env.VERCEL || 
   process.env.VERCEL_ENV || 
   process.env.NOW_REGION ||
   process.env.AWS_LAMBDA_FUNCTION_NAME ||
-  process.env.LAMBDA_TASK_ROOT ||
-  (typeof process.env.VERCEL !== 'undefined')
+  process.env.LAMBDA_TASK_ROOT
 );
-
-// Skip directory creation completely - not needed for memory storage
-// In serverless (Vercel), filesystem is read-only
-// In local dev, directories will be created on first write if using disk storage
-// This prevents any filesystem errors in serverless environments
 
 // Storage configuration
 // Use memory storage for serverless, disk storage for local development
-// Always use memory storage in serverless environments (Vercel, Lambda, etc.)
+// Memory storage stores files in req.file.buffer (no filesystem needed)
 const storage = isServerless
   ? multer.memoryStorage() // Memory storage for serverless (files in req.file.buffer)
   : multer.diskStorage({
       destination: function (req, file, cb) {
+        const fs = require('fs');
         let uploadPath = 'uploads/';
         
         if (file.fieldname === 'cv' || file.fieldname === 'resume') {
-          uploadPath = uploadDirs.cvs;
+          uploadPath = 'uploads/cvs';
         } else if (file.fieldname === 'logo') {
-          uploadPath = uploadDirs.companyLogos;
+          uploadPath = 'uploads/company-logos';
         } else if (file.fieldname === 'jobImage' || file.fieldname === 'image') {
-          uploadPath = uploadDirs.jobImages;
+          uploadPath = 'uploads/job-images';
         } else {
-          uploadPath = uploadDirs.profileImages;
+          uploadPath = 'uploads/profile-images';
+        }
+        
+        // Create directory if it doesn't exist (only in local dev)
+        try {
+          if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+          }
+        } catch (err) {
+          // Ignore errors - directory creation is not critical
         }
         
         cb(null, uploadPath);
