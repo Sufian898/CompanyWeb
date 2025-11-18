@@ -67,6 +67,14 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Root route handler for Vercel (should not be reached if routing works)
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'HPW Pool API - Use /api routes'
+  });
+});
+
 // For Vercel serverless functions, export the app directly
 // For local development, start the server
 if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
