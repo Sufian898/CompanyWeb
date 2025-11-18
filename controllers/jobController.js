@@ -122,10 +122,10 @@ exports.createJob = async (req, res) => {
       });
     }
     
-    // Handle image upload
+    // Handle image upload (Cloudinary)
     let imagePath = '';
-    if (req.file) {
-      imagePath = req.file.path.replace(/\\/g, '/'); // Convert backslashes to forward slashes for URLs
+    if (req.file && req.file.cloudinaryUrl) {
+      imagePath = req.file.cloudinaryUrl;
     }
     
     // Parse JSON strings from FormData
@@ -205,10 +205,10 @@ exports.updateJob = async (req, res) => {
       });
     }
     
-    // Handle image upload
+    // Handle image upload (Cloudinary)
     let imagePath = job.image || '';
-    if (req.file) {
-      imagePath = req.file.path.replace(/\\/g, '/');
+    if (req.file && req.file.cloudinaryUrl) {
+      imagePath = req.file.cloudinaryUrl;
     }
     
     // Parse JSON strings from FormData
