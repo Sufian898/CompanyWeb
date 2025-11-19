@@ -4,7 +4,9 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "functions": {
-    "backend/api/index.js": {}
+    "backend/api/index.js": {
+      "runtime": "nodejs20.x"
+    }
   },
   "rewrites": [
     {
