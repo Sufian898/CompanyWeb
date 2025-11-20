@@ -5,6 +5,9 @@ const path = require('path');
 const fs = require('fs');
 require('dotenv').config();
 
+console.log('🚀 API Serverless Function Initializing...');
+console.log('Environment:', process.env.VERCEL ? 'Vercel' : 'Local');
+
 const app = express();
 
 // Middleware
@@ -77,10 +80,8 @@ connectDB().catch(err => {
 // Middleware to ensure MongoDB connection before handling requests
 app.use(async (req, res, next) => {
   try {
-    // Log all requests for debugging (only in development)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[${req.method}] ${req.originalUrl || req.path}`);
-    }
+    // Log all requests for debugging
+    console.log(`[${req.method}] ${req.originalUrl || req.path} | Path: ${req.path} | BaseURL: ${req.baseUrl}`);
     
     // Ensure MongoDB is connected before processing any request
     if (mongoose.connection.readyState !== 1) {
@@ -143,12 +144,14 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Root endpoint
+// Root endpoint (for serverless function root)
 app.get('/', (req, res) => {
+  console.log('Root endpoint called in serverless function');
   res.json({ 
     success: true,
-    message: 'HPW Pool API',
+    message: 'HPW Pool API - Serverless Function',
     version: '1.0.0',
+    note: 'This is the serverless function root. Use /api/* endpoints.',
     endpoints: {
       health: '/api/health',
       auth: '/api/auth',
@@ -187,8 +190,17 @@ app.use((req, res) => {
   });
 });
 
-// Export for Vercel serverless (STEP-1)
-// Vercel expects the app to be exported directly
-// NO app.listen() - Vercel doesn't allow it (STEP-1)
+// Export for Vercel serverless
+// Vercel automatically handles /api/* routes when file is in api/ folder
+// The request path includes /api prefix, so our routes are correct
+console.log('✅ Express app configured and ready');
+console.log('Available routes:', [
+  '/api/health',
+  '/api/auth',
+  '/api/professionals',
+  '/api/locations',
+  '/api/jobs'
+]);
+
 module.exports = app;
 
