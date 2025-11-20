@@ -1,8 +1,11 @@
 {
   "version": 2,
+  "buildCommand": "echo 'Backend-only deployment - no build needed'",
+  "outputDirectory": ".",
   "functions": {
-    "index.js": {
-      "runtime": "nodejs18.x"
+    "api/index.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
     }
   },
   "routes": [
