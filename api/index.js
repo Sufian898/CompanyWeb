@@ -52,12 +52,12 @@ const connectDB = async () => {
     return connectionPromise;
   }
 
-  // Start new connection - REMOVED TIMEOUTS for serverless (STEP-6)
+  // Start new connection - REMOVED TIMEOUTS for serverless
   connectionPromise = mongoose.connect(MONGODB_URI, {
     retryWrites: true,
     w: 'majority',
-    maxPoolSize: 10, // Maintain up to 10 socket connections
-    minPoolSize: 1, // Maintain at least 1 socket connection
+    maxPoolSize: 10,
+    minPoolSize: 1,
   }).then(() => {
     isConnected = true;
     console.log('✅ MongoDB Connected Successfully');
@@ -103,7 +103,7 @@ app.use(async (req, res, next) => {
   }
 });
 
-// Import routes - Updated paths (STEP-2)
+// Import routes - Updated paths (from api/ folder, go up one level to root)
 const authRoutes = require('../routes/auth.cjs');
 const locationRoutes = require('../routes/locations.cjs');
 const professionRoutes = require('../routes/professions.cjs');
@@ -125,8 +125,20 @@ app.use('/api/trainees', traineeRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Health check - handle both /api/health and /health
+// Health check
 app.get('/api/health', (req, res) => {
+  console.log('Health check endpoint called');
+  res.json({ 
+    status: 'OK', 
+    message: 'HPW Pool API is running',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString(),
+    environment: process.env.VERCEL ? 'Vercel' : 'Local'
+  });
+});
+
+app.get('/health', (req, res) => {
+  console.log('Health check endpoint called (without /api)');
   res.json({ 
     status: 'OK', 
     message: 'HPW Pool API is running',
@@ -135,12 +147,25 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-app.get('/health', (req, res) => {
+// Catch-all for /api root
+app.get('/api', (req, res) => {
+  console.log('API root endpoint called');
   res.json({ 
-    status: 'OK', 
-    message: 'HPW Pool API is running',
-    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
-    timestamp: new Date().toISOString()
+    success: true,
+    message: 'HPW Pool API',
+    version: '1.0.0',
+    endpoints: {
+      health: '/api/health',
+      auth: '/api/auth',
+      locations: '/api/locations',
+      professions: '/api/professions',
+      professionals: '/api/professionals',
+      companies: '/api/companies',
+      jobs: '/api/jobs',
+      trainees: '/api/trainees',
+      upload: '/api/upload',
+      admin: '/api/admin'
+    }
   });
 });
 
@@ -186,13 +211,13 @@ app.use((req, res) => {
     method: req.method,
     path: req.path,
     originalUrl: req.originalUrl,
-    hint: 'Check available endpoints at /'
+    hint: 'Check available endpoints at /api'
   });
 });
 
 // Export for Vercel serverless
 // Vercel automatically handles /api/* routes when file is in api/ folder
-// The request path includes /api prefix, so our routes are correct
+// NO app.listen() - Vercel doesn't allow it
 console.log('✅ Express app configured and ready');
 console.log('Available routes:', [
   '/api/health',
@@ -203,4 +228,3 @@ console.log('Available routes:', [
 ]);
 
 module.exports = app;
-
